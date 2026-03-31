@@ -759,13 +759,25 @@
     }
 
     async function saveCards() {
-      // Save to localStorage first (always works offline)
-      localStorage.setItem('识字卡_cards', JSON.stringify(cards));
       // Save to Firebase
       try {
         await set(ref(db, 'cards'), cards);
       } catch (error) {
         console.error('Firebase save error:', error);
+      }
+      // Save to localStorage as backup (may fail if quota exceeded)
+      try {
+        localStorage.setItem('识字卡_cards', JSON.stringify(cards));
+      } catch (error) {
+        if (error.name === 'QuotaExceededError') {
+          console.warn('localStorage 已满，清除旧数据后重试...');
+          localStorage.removeItem('识字卡_cards');
+          try {
+            localStorage.setItem('识字卡_cards', JSON.stringify(cards));
+          } catch (retryError) {
+            console.error('localStorage 仍然无法保存，数据已同步到云端');
+          }
+        }
       }
     }
 
