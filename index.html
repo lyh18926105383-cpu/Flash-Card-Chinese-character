@@ -675,7 +675,26 @@
     <p>加载中...</p>
   </div>
 
-  <script>
+  <script type="module">
+    // Firebase imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+    import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-database.js";
+
+    // Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCkeZJFsv_SIeAr3QlBAG_79jc2zPijsQY",
+      authDomain: "flash-card-chinese-character.firebaseapp.com",
+      projectId: "flash-card-chinese-character",
+      storageBucket: "flash-card-chinese-character.firebasestorage.app",
+      messagingSenderId: "157765978802",
+      appId: "1:157765978802:web:692a164ad273bc7821d7ab",
+      measurementId: "G-NRT01BRVNZ"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
     // State
     let cards = [];
     let currentIndex = 0;
@@ -704,22 +723,50 @@
     const loadingOverlay = document.getElementById('loadingOverlay');
 
     // Initialize
-    function init() {
-      loadCards();
+    async function init() {
+      await loadCards();
       render();
       setupEventListeners();
     }
 
-    // LocalStorage
-    function loadCards() {
-      const saved = localStorage.getItem('识字卡_cards');
-      if (saved) {
-        cards = JSON.parse(saved);
+    // Firebase & LocalStorage sync
+    async function loadCards() {
+      try {
+        // Try to load from Firebase first
+        const cardsRef = ref(db, 'cards');
+        const snapshot = await get(cardsRef);
+        if (snapshot.exists()) {
+          cards = snapshot.val();
+          // Also save to localStorage as backup
+          localStorage.setItem('识字卡_cards', JSON.stringify(cards));
+        } else {
+          // Fallback to localStorage
+          const saved = localStorage.getItem('识字卡_cards');
+          if (saved) {
+            cards = JSON.parse(saved);
+            // Sync localStorage data to Firebase
+            await set(ref(db, 'cards'), cards);
+          }
+        }
+      } catch (error) {
+        console.error('Firebase load error, using localStorage:', error);
+        // Fallback to localStorage on error
+        const saved = localStorage.getItem('识字卡_cards');
+        if (saved) {
+          cards = JSON.parse(saved);
+        }
       }
     }
 
-    function saveCards() {
+    async function saveCards() {
+      // Save to localStorage first (always works offline)
       localStorage.setItem('识字卡_cards', JSON.stringify(cards));
+      // Save to Firebase
+      try {
+        await set(ref(db, 'cards'), cards);
+      } catch (error) {
+        console.error('Firebase save error:', error);
+      }
     }
 
     // Event Listeners
@@ -1187,7 +1234,7 @@
     }
 
 
-    function confirmAction() {
+    async function confirmAction() {
       const char = charInput.value.trim();
       const words = wordsInput.value.trim().split(/\s+/).filter(w => w).slice(0, 3);
 
@@ -1196,7 +1243,7 @@
         const index = cards.findIndex(c => c.id === editingCardId);
         if (index !== -1) {
           cards[index].words = words.length > 0 ? words : generateDefaultWords(char);
-          saveCards();
+          await saveCards();
           render();
         }
       } else {
@@ -1209,14 +1256,14 @@
         };
         cards.push(newCard);
         currentIndex = cards.length - 1;
-        saveCards();
+        await saveCards();
         render();
       }
 
       closeModal();
     }
 
-    function deleteCurrentCard() {
+    async function deleteCurrentCard() {
       if (cards.length === 0) return;
 
       const card = cards[currentIndex];
@@ -1226,7 +1273,7 @@
         currentIndex = Math.max(0, cards.length - 1);
       }
       isFlipped = false;
-      saveCards();
+      await saveCards();
       render();
     }
 
